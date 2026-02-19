@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>متابعة الإنتاج</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=JetBrains+Mono:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f; --surface: #111418; --surface2: #181c22; --border: #1e2530;
+    --accent: #e8b13a; --accent2: #3ab8e8; --red: #e84a3a; --green: #3ae89a;
+    --orange: #e8743a; --text: #c8d0dc; --text-dim: #5a6478; --text-bright: #eef2f8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Cairo', sans-serif; min-height: 100vh; overflow-x: hidden; direction: rtl; }
+  body::before { content: ''; position: fixed; inset: 0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E"); pointer-events: none; z-index: 9999; opacity: 0.4; }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 100; flex-wrap: wrap; gap: 10px; }
+  .logo { font-family: 'Cairo', sans-serif; font-size: 26px; font-weight: 900; letter-spacing: 1px; color: var(--accent); }
+  .logo span { color: var(--text-dim); font-size: 11px; font-family: 'Cairo', sans-serif; display: block; margin-top: -4px; font-weight: 400; }
+  .header-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  select.ctrl { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: 'Cairo', sans-serif; font-size: 12px; padding: 8px 14px; cursor: pointer; outline: none; transition: border-color .2s; direction: rtl; }
+  select.ctrl:hover, select.ctrl:focus { border-color: var(--accent); }
+
+  .btn { background: var(--accent); color: #000; border: none; font-family: 'Cairo', sans-serif; font-size: 15px; font-weight: 700; padding: 8px 20px; cursor: pointer; transition: all .2s; display: inline-block; }
+  .btn:hover { background: #f5c85c; transform: translateY(-1px); }
+  .btn.secondary { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+  .btn.secondary:hover { background: var(--accent); color: #000; }
+  .btn.danger { background: var(--red); color: #fff; }
+  .btn.danger:hover { background: #ff5f4f; transform: translateY(-1px); }
+  .btn.sm { font-size: 12px; padding: 5px 12px; }
+  .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-family: 'Cairo', sans-serif; font-size: 13px; }
+  .btn.ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; transform: none; }
+
+  .main { display: grid; grid-template-columns: 1fr 260px; min-height: calc(100vh - 61px); }
+  aside { background: var(--surface); border-left: 1px solid var(--border); padding: 24px 0; position: sticky; top: 61px; height: calc(100vh - 61px); overflow-y: auto; order: 2; }
+  .nav-label { font-family: 'Cairo', sans-serif; font-size: 10px; font-weight: 600; color: var(--text-dim); padding: 0 24px 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 24px; cursor: pointer; transition: all .15s; border-right: 3px solid transparent; font-size: 15px; font-weight: 600; color: var(--text-dim); }
+  .nav-item:hover { background: var(--surface2); color: var(--text); border-right-color: var(--border); }
+  .nav-item.active { background: var(--surface2); color: var(--accent); border-right-color: var(--accent); }
+  .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+  .sidebar-divider { height: 1px; background: var(--border); margin: 16px 24px; }
+  .sidebar-stat { padding: 7px 24px; font-family: 'Cairo', sans-serif; font-size: 11px; display: flex; justify-content: space-between; color: var(--text-dim); }
+  .sidebar-stat .val { font-weight: 700; }
+
+  .content { padding: 32px; overflow-y: auto; order: 1; }
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn .3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  .page-title { font-family: 'Cairo', sans-serif; font-size: 38px; font-weight: 900; color: var(--text-bright); line-height: 1.1; margin-bottom: 4px; }
+  .page-subtitle { font-family: 'Cairo', sans-serif; font-size: 11px; color: var(--text-dim); margin-bottom: 28px; font-weight: 400; }
+
+  /* VEHICLES */
+  .vehicles-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .vehicle-card { background: var(--surface); border: 1px solid var(--border); padding: 20px; position: relative; overflow: hidden; transition: border-color .2s, transform .2s; }
+  .vehicle-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .vc-stripe { position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .vc-num { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600; color: var(--text-bright); letter-spacing: 2px; }
+  .vc-type { font-family: 'Cairo', sans-serif; font-size: 11px; color: var(--text-dim); margin-bottom: 12px; font-weight: 400; }
+  .vc-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; gap: 8px; }
+  .vc-row span { color: var(--text); text-align: left; font-size: 11px; }
+  .status-badge { display: inline-block; font-family: 'Cairo', sans-serif; font-size: 10px; font-weight: 600; padding: 4px 10px; margin-top: 12px; border: 1px solid; }
+  .vc-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+  /* FILTER BAR */
+  .filter-bar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+  .filter-bar input { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: 'Cairo', sans-serif; font-size: 12px; padding: 8px 12px; outline: none; transition: border-color .2s; direction: rtl; }
+  .filter-bar input:focus { border-color: var(--accent); }
+  .tag-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { padding: 4px 12px; font-family: 'Cairo', sans-serif; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); transition: all .15s; color: var(--text-dim); background: transparent; }
+  .tag.active, .tag:hover { border-color: var(--accent); color: var(--accent); background: rgba(232,177,58,.05); }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); z-index: 1000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); width: 540px; max-width: 95vw; max-height: 90vh; overflow-y: auto; animation: slideUp .3s ease; direction: rtl; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+  .modal-title { font-family: 'Cairo', sans-serif; font-size: 22px; font-weight: 900; color: var(--text-bright); }
+  .modal-close { background: none; border: none; color: var(--text-dim); font-size: 22px; cursor: pointer; transition: color .2s; }
+  .modal-close:hover { color: var(--red); }
+  .modal-body { padding: 24px; }
+  .modal-footer { display: flex; gap: 12px; justify-content: flex-start; padding: 16px 24px; border-top: 1px solid var(--border); }
+
+  .form-group { margin-bottom: 18px; }
+  .form-label { display: block; font-family: 'Cairo', sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; }
+  .form-input, .form-select, .form-textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: 'Cairo', sans-serif; font-size: 13px; padding: 10px 14px; outline: none; transition: border-color .2s; direction: rtl; }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); }
+  .form-textarea { resize: vertical; min-height: 80px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* REPORTS */
+  .reports-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .report-card { background: var(--surface); border: 1px solid var(--border); padding: 24px 20px; position: relative; overflow: hidden; }
+  .report-card::after { content: ''; position: absolute; bottom: 0; right: 0; width: 60px; height: 60px; background: radial-gradient(circle, rgba(232,177,58,.08) 0%, transparent 70%); }
+  .report-icon { font-size: 28px; margin-bottom: 12px; }
+  .report-value { font-family: 'Cairo', sans-serif; font-size: 44px; font-weight: 900; color: var(--accent); line-height: 1; margin-bottom: 4px; }
+  .report-label { font-family: 'Cairo', sans-serif; font-size: 11px; font-weight: 600; color: var(--text-dim); }
+  .chart-section { background: var(--surface); border: 1px solid var(--border); padding: 24px; margin-bottom: 20px; }
+  .chart-title { font-family: 'Cairo', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-bright); margin-bottom: 20px; }
+  .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; overflow-x: auto; padding-bottom: 4px; }
+  .bar-group { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; min-width: 36px; }
+  .bar { width: 100%; background: linear-gradient(180deg, var(--accent), rgba(232,177,58,.3)); border-top: 2px solid var(--accent); min-height: 4px; }
+  .bar:hover { opacity: .7; }
+  .bar-label { font-family: 'Cairo', sans-serif; font-size: 10px; color: var(--text-dim); text-align: center; font-weight: 600; }
+  .bar-val { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); }
+  .status-breakdown { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .sb-card { background: var(--surface); border: 1px solid var(--border); padding: 16px; text-align: center; }
+  .sb-val { font-family: 'Cairo', sans-serif; font-size: 36px; font-weight: 900; }
+  .sb-lab { font-family: 'Cairo', sans-serif; font-size: 10px; font-weight: 600; color: var(--text-dim); }
+
+  /* SETTINGS */
+  .settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; }
+  .settings-card { background: var(--surface); border: 1px solid var(--border); padding: 24px; }
+  .settings-card-title { font-family: 'Cairo', sans-serif; font-size: 20px; font-weight: 700; color: var(--text-bright); margin-bottom: 4px; }
+  .settings-card-sub { font-family: 'Cairo', sans-serif; font-size: 10px; color: var(--text-dim); margin-bottom: 18px; }
+  .item-list { list-style: none; margin-bottom: 16px; }
+  .item-list li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .item-list li:last-child { border-bottom: none; }
+  .item-row { display: flex; align-items: center; gap: 8px; }
+  .item-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .item-name { flex: 1; font-size: 14px; font-family: 'Cairo', sans-serif; color: var(--text); }
+  .item-edit-row { display: none; margin-top: 8px; gap: 6px; align-items: center; }
+  .item-edit-row.active { display: flex; }
+  .item-edit-row input { flex: 1; background: var(--bg); border: 1px solid var(--accent); color: var(--text); font-family: 'Cairo', sans-serif; font-size: 13px; padding: 6px 10px; outline: none; direction: rtl; }
+  .add-item-row { display: flex; gap: 8px; margin-top: 4px; }
+  .add-item-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-family: 'Cairo', sans-serif; font-size: 13px; padding: 8px 12px; outline: none; transition: border-color .2s; direction: rtl; }
+  .add-item-row input:focus { border-color: var(--accent); }
+  .color-swatches { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .swatch { width: 22px; height: 22px; cursor: pointer; border: 2px solid transparent; transition: border-color .15s; flex-shrink: 0; }
+  .swatch.selected { border-color: #fff; outline: 1px solid #666; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 24px; left: 24px; background: var(--surface); border: 1px solid var(--green); color: var(--green); font-family: 'Cairo', sans-serif; font-size: 12px; font-weight: 600; padding: 12px 20px; z-index: 9000; transform: translateY(80px); opacity: 0; transition: all .3s; max-width: 320px; direction: rtl; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* SAVE INDICATOR */
+  .save-indicator { display: flex; align-items: center; gap: 6px; font-family: 'Cairo', sans-serif; font-size: 11px; color: var(--text-dim); transition: color .3s; }
+  .save-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim); transition: background .3s; flex-shrink: 0; }
+  .save-indicator.saved .save-dot { background: var(--green); animation: pulse 1s ease; }
+  .save-indicator.saved { color: var(--green); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* DATA MANAGEMENT CARD */
+  .data-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+  .data-info { font-family: 'Cairo', sans-serif; font-size: 12px; color: var(--text-dim); margin-bottom: 14px; line-height: 2; }
+  .data-info span { color: var(--accent); font-weight: 700; }
+  .danger-zone { margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(232,74,58,.2); }
+  .danger-zone-label { font-family: 'Cairo', sans-serif; font-size: 10px; color: var(--red); margin-bottom: 10px; opacity: .7; font-weight: 600; }
+
+  .empty { text-align: center; padding: 60px 20px; color: var(--text-dim); font-family: 'Cairo', sans-serif; font-size: 13px; }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); }
+
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; }
+    aside { display: none; }
+    .form-row { grid-template-columns: 1fr; }
+    header { padding: 12px 16px; }
+    .content { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">متابعة الإنتاج <span>// نظام متابعة إصلاح المركبات</span></div>
+  <div class="header-controls">
+    <div class="save-indicator" id="saveIndicator">
+      <div class="save-dot"></div><span id="saveLabel">لا يوجد حفظ</span>
+    </div>
+    <select class="ctrl" id="buildingSelect" onchange="filterBuilding()"><option value="">كل المباني</option></select>
+    <button class="btn" onclick="openAddModal()">+ إضافة مركبة</button>
+  </div>
+</header>
+
+<div class="main">
+  <aside>
+    <div class="nav-label">القائمة الرئيسية</div>
+    <div class="nav-item active" onclick="showPage('vehicles',this)"><span class="icon">🚗</span> المركبات الحالية</div>
+    <div class="nav-item" onclick="showPage('reports',this)"><span class="icon">📊</span> التقارير والإحصائيات</div>
+    <div class="nav-item" onclick="showPage('settings',this)"><span class="icon">⚙️</span> الإعدادات</div>
+    <div class="sidebar-divider"></div>
+    <div class="nav-label">إحصائيات مباشرة</div>
+    <div class="sidebar-stat"><span>إجمالي المركبات</span><span class="val" id="sb-total" style="color:var(--accent)">0</span></div>
+    <div id="sb-status-list"></div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-stat"><span>متوسط وقت الإصلاح</span><span class="val" id="sb-avg" style="color:var(--accent)">—</span></div>
+  </aside>
+
+  <div class="content">
+
+    <!-- صفحة المركبات -->
+    <div class="page active" id="page-vehicles">
+      <div class="page-title">المركبات الحالية</div>
+      <div class="page-subtitle">// الحالة اللحظية — جميع الوحدات المسجلة</div>
+      <div class="filter-bar">
+        <input type="text" placeholder="ابحث برقم المركبة أو اسم المهندس..." id="searchInput" oninput="renderVehicles()" style="min-width:220px;">
+        <div class="tag-row" id="statusFilterTags"></div>
+      </div>
+      <div class="vehicles-grid" id="vehiclesGrid"></div>
+    </div>
+
+    <!-- صفحة التقارير -->
+    <div class="page" id="page-reports">
+      <div class="page-title">التقارير والإحصائيات</div>
+      <div class="page-subtitle">// لوحة المتابعة الإدارية الشاملة</div>
+      <div class="reports-grid" id="reportsGrid"></div>
+      <div class="status-breakdown" id="statusBreakdown"></div>
+      <div class="chart-section">
+        <div class="chart-title">عدد المركبات لكل مبنى</div>
+        <div class="bar-chart" id="buildingChart"></div>
+      </div>
+      <div class="chart-section">
+        <div class="chart-title">الإدخالات اليومية — آخر 7 أيام</div>
+        <div class="bar-chart" id="dailyChart"></div>
+      </div>
+    </div>
+
+    <!-- صفحة الإعدادات -->
+    <div class="page" id="page-settings">
+      <div class="page-title">الإعدادات</div>
+      <div class="page-subtitle">// إضافة وتعديل وحذف المباني وأنواع المركبات وحالات الإصلاح</div>
+      <div class="settings-grid">
+
+        <div class="settings-card">
+          <div class="settings-card-title">🏢 المباني</div>
+          <div class="settings-card-sub">// اضغط تعديل لإعادة التسمية</div>
+          <ul class="item-list" id="buildings-list"></ul>
+          <div class="add-item-row">
+            <input type="text" id="new-building" placeholder="اسم المبنى الجديد..." onkeydown="if(event.key==='Enter') addBuilding()" />
+            <button class="btn sm" onclick="addBuilding()">إضافة</button>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">🚗 أنواع المركبات</div>
+          <div class="settings-card-sub">// اضغط تعديل لإعادة التسمية</div>
+          <ul class="item-list" id="types-list"></ul>
+          <div class="add-item-row">
+            <input type="text" id="new-type" placeholder="نوع المركبة الجديد..." onkeydown="if(event.key==='Enter') addType()" />
+            <button class="btn sm" onclick="addType()">إضافة</button>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">📋 حالات الإصلاح</div>
+          <div class="settings-card-sub">// اضغط تعديل لإعادة التسمية</div>
+          <ul class="item-list" id="statuses-list"></ul>
+          <div class="add-item-row">
+            <input type="text" id="new-status" placeholder="اسم الحالة الجديدة..." onkeydown="if(event.key==='Enter') addStatus()" />
+            <button class="btn sm" onclick="addStatus()">إضافة</button>
+          </div>
+          <div style="margin-top:14px;font-family:'Cairo',sans-serif;font-size:10px;color:var(--text-dim);margin-bottom:6px;font-weight:600;">لون الحالة الجديدة</div>
+          <div class="color-swatches" id="colorSwatches"></div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-title">💾 إدارة البيانات</div>
+          <div class="settings-card-sub">// حفظ · تصدير · استيراد · إعادة تعيين</div>
+          <div class="data-info" id="dataInfo">جارٍ التحميل...</div>
+          <div class="data-actions">
+            <button class="btn sm" onclick="saveNow()">💾 حفظ الآن</button>
+            <button class="btn sm secondary" onclick="exportData()">⬇ تصدير JSON</button>
+            <label class="btn sm secondary" style="cursor:pointer">⬆ استيراد JSON<input type="file" accept=".json" onchange="importData(event)" style="display:none"></label>
+          </div>
+          <div class="danger-zone">
+            <div class="danger-zone-label">// منطقة الخطر</div>
+            <button class="btn sm danger" onclick="resetToDefaults()">↺ إعادة التعيين الافتراضي</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- نافذة إضافة/تعديل المركبة -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOuter(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">تسجيل مركبة جديدة</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="f-id" />
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">رقم المركبة *</label>
+          <input class="form-input" id="f-num" placeholder="مثال: VH-0042" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">نوع المركبة *</label>
+          <select class="form-select" id="f-type"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">تاريخ الدخول *</label>
+          <input class="form-input" id="f-date" type="date" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">المبنى</label>
+          <select class="form-select" id="f-building"></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">المهندس المسؤول</label>
+        <input class="form-input" id="f-eng" placeholder="اسم المهندس" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">نوع العطل *</label>
+        <input class="form-input" id="f-fault" placeholder="وصف العطل..." />
+      </div>
+      <div class="form-group">
+        <label class="form-label">حالة الإصلاح *</label>
+        <select class="form-select" id="f-status"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">ملاحظات</label>
+        <textarea class="form-textarea" id="f-notes" placeholder="ملاحظات إضافية..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn secondary" onclick="closeModal()">إلغاء</button>
+      <button class="btn" onclick="saveVehicle()">حفظ المركبة</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── البيانات ──────────────────────────────────────────────────────────────────
+let buildings    = [];
+let vehicleTypes = [];
+let statuses     = [];
+let vehicles     = [];
+let nextId=9, nextBId=11, nextSId=5;
+
+const PALETTE = ['#e8743a','#3ab8e8','#3ae89a','#e84a3a','#e8b13a','#a64de8','#e84a8c','#4de8c2','#e8d83a','#8ce83a'];
+let selectedColor = PALETTE[0];
+let filterSt='', filterBld='';
+
+// ── المساعدات ─────────────────────────────────────────────────────────────────
+const getBld  = id => buildings.find(x=>x.id===id);
+const getSt   = id => statuses.find(x=>x.id===id);
+const bldName = id => { const b=getBld(id); return b?b.name:id; };
+const stName  = id => { const s=getSt(id);  return s?s.name:id; };
+const stColor = id => { const s=getSt(id);  return s?s.color:'#5a6478'; };
+const fmtDate = d  => d ? new Date(d).toLocaleDateString('ar-EG',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+
+function toast(msg, err=false) {
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.borderColor=err?'var(--red)':'var(--green)';
+  t.style.color=err?'var(--red)':'var(--green)';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3000);
+}
+
+// ── التنقل ────────────────────────────────────────────────────────────────────
+function showPage(name, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+  renderAll();
+}
+
+// ── الفلاتر ───────────────────────────────────────────────────────────────────
+function renderFilterTags() {
+  document.getElementById('statusFilterTags').innerHTML =
+    `<button class="tag ${filterSt===''?'active':''}" onclick="setStatusFilter('')">الكل</button>` +
+    statuses.map(s=>`<button class="tag ${filterSt===s.id?'active':''}" onclick="setStatusFilter('${s.id}')">${s.name}</button>`).join('');
+}
+function setStatusFilter(st){ filterSt=st; renderFilterTags(); renderVehicles(); }
+function filterBuilding(){ filterBld=document.getElementById('buildingSelect').value; renderVehicles(); }
+
+function populateHeaderSelects() {
+  const bs=document.getElementById('buildingSelect');
+  const saved=bs.value;
+  bs.innerHTML='<option value="">كل المباني</option>'+
+    buildings.map(b=>`<option value="${b.id}" ${saved===b.id?'selected':''}>${b.name}</option>`).join('');
+}
+
+function populateFormSelects(v=null) {
+  document.getElementById('f-type').innerHTML =
+    '<option value="">اختر النوع</option>'+vehicleTypes.map(t=>`<option ${v&&v.type===t?'selected':''}>${t}</option>`).join('');
+  document.getElementById('f-building').innerHTML =
+    '<option value="">اختر المبنى</option>'+buildings.map(b=>`<option value="${b.id}" ${v&&v.building===b.id?'selected':''}>${b.name}</option>`).join('');
+  document.getElementById('f-status').innerHTML =
+    statuses.map(s=>`<option value="${s.id}" ${v&&v.status===s.id?'selected':''}>${s.name}</option>`).join('');
+}
+
+// ── صفحة المركبات ─────────────────────────────────────────────────────────────
+function getFiltered() {
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  return vehicles.filter(v=>
+    (!filterSt||v.status===filterSt) &&
+    (!filterBld||v.building===filterBld) &&
+    (!q||v.num.toLowerCase().includes(q)||(v.engineer||'').toLowerCase().includes(q))
+  );
+}
+
+function renderVehicles() {
+  renderFilterTags();
+  const grid=document.getElementById('vehiclesGrid');
+  const list=getFiltered();
+  if(!list.length){
+    grid.innerHTML='<div class="empty"><div class="empty-icon">🚧</div>لا توجد مركبات تطابق الفلتر الحالي</div>';
+    return;
+  }
+  grid.innerHTML=list.map(v=>{
+    const c=stColor(v.status);
+    const opts=statuses.map(s=>`<option value="${s.id}" ${v.status===s.id?'selected':''}>${s.name}</option>`).join('');
+    return `<div class="vehicle-card">
+      <div class="vc-stripe" style="background:${c}"></div>
+      <div class="vc-num">${v.num}</div>
+      <div class="vc-type">${v.type}${v.building?' — '+bldName(v.building):''}</div>
+      <div class="vc-row">تاريخ الدخول <span>${fmtDate(v.date)}</span></div>
+      <div class="vc-row">المهندس <span>${v.engineer||'—'}</span></div>
+      <div class="vc-row">المبنى <span>${v.building?bldName(v.building):'—'}</span></div>
+      <div class="vc-row">العطل <span>${v.fault}</span></div>
+      <div class="status-badge" style="color:${c};background:${c}18;border-color:${c}44">${stName(v.status)}</div>
+      <div class="vc-actions">
+        <select class="form-select" style="flex:1;font-size:12px;padding:6px 8px" onchange="changeStatus(${v.id},this.value)">${opts}</select>
+        <button class="btn sm ghost" onclick="openEditModal(${v.id})">تعديل</button>
+        <button class="btn sm danger" onclick="deleteVehicle(${v.id})">حذف</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function changeStatus(id, st) {
+  const v=vehicles.find(x=>x.id===id);
+  if(v){ v.status=st; renderAll(); toast('تم تحديث الحالة: '+stName(st)); }
+}
+
+function deleteVehicle(id) {
+  if(!confirm('هل تريد حذف هذه المركبة من النظام؟')) return;
+  vehicles=vehicles.filter(v=>v.id!==id);
+  renderAll();
+  toast('تم حذف المركبة.');
+}
+
+// ── النافذة المنبثقة ──────────────────────────────────────────────────────────
+function openAddModal() {
+  populateFormSelects();
+  document.getElementById('modal-title').textContent='تسجيل مركبة جديدة';
+  document.getElementById('f-id').value='';
+  ['f-num','f-fault','f-eng','f-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-date').value=new Date().toISOString().split('T')[0];
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function openEditModal(id) {
+  const v=vehicles.find(x=>x.id===id); if(!v) return;
+  populateFormSelects(v);
+  document.getElementById('modal-title').textContent='تعديل المركبة — '+v.num;
+  document.getElementById('f-id').value=v.id;
+  document.getElementById('f-num').value=v.num;
+  document.getElementById('f-date').value=v.date;
+  document.getElementById('f-eng').value=v.engineer||'';
+  document.getElementById('f-fault').value=v.fault;
+  document.getElementById('f-notes').value=v.notes||'';
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); }
+function closeModalOuter(e){ if(e.target===document.getElementById('modalOverlay')) closeModal(); }
+
+function saveVehicle() {
+  const num  =document.getElementById('f-num').value.trim();
+  const type =document.getElementById('f-type').value;
+  const date =document.getElementById('f-date').value;
+  const fault=document.getElementById('f-fault').value.trim();
+  const st   =document.getElementById('f-status').value;
+  if(!num||!type||!date||!fault||!st){ toast('⚠ يرجى ملء جميع الحقول الإلزامية.',true); return; }
+  const data={
+    num, type, date, fault, status:st,
+    building: document.getElementById('f-building').value,
+    engineer: document.getElementById('f-eng').value,
+    notes:    document.getElementById('f-notes').value,
+  };
+  const editId=document.getElementById('f-id').value;
+  if(editId){
+    const i=vehicles.findIndex(v=>v.id==editId);
+    if(i!==-1) vehicles[i]={...vehicles[i],...data};
+    toast('✓ تم تحديث المركبة.');
+  } else {
+    vehicles.push({id:nextId++,...data});
+    toast('✓ تم تسجيل المركبة '+num+'.');
+  }
+  closeModal();
+  renderAll();
+}
+
+// ── التقارير ──────────────────────────────────────────────────────────────────
+function calcAvgTime() {
+  const done=vehicles.filter(v=>v.status==='repaired'||v.status==='delivered');
+  if(!done.length) return null;
+  return Math.round(done.reduce((a,v)=>a+Math.round((Date.now()-new Date(v.date))/86400000),0)/done.length);
+}
+
+function renderReports() {
+  const bySt=id=>vehicles.filter(v=>v.status===id).length;
+  const completed=statuses.filter(s=>s.id==='repaired'||s.id==='delivered').reduce((a,s)=>a+bySt(s.id),0);
+  const avg=calcAvgTime();
+  const bldCounts=buildings.map(b=>({name:b.name,cnt:vehicles.filter(v=>v.building===b.id).length}));
+  const maxBld=bldCounts.reduce((a,b)=>b.cnt>a.cnt?b:a,{cnt:0,name:'—'});
+
+  document.getElementById('reportsGrid').innerHTML=`
+    <div class="report-card"><div class="report-icon">🚗</div><div class="report-value">${vehicles.length}</div><div class="report-label">إجمالي المركبات</div></div>
+    <div class="report-card"><div class="report-icon">✅</div><div class="report-value" style="color:var(--green)">${completed}</div><div class="report-label">المركبات المنجزة</div></div>
+    <div class="report-card"><div class="report-icon">⏱️</div><div class="report-value" style="color:var(--accent2);font-size:32px">${avg?avg+' يوم':'—'}</div><div class="report-label">متوسط وقت الإصلاح</div></div>
+    <div class="report-card"><div class="report-icon">🏢</div><div class="report-value" style="color:var(--red);font-size:26px;line-height:1.1">${maxBld.cnt?maxBld.name:'—'}</div><div class="report-label">المبنى الأكثر ازدحاماً</div></div>`;
+
+  document.getElementById('statusBreakdown').innerHTML=
+    statuses.map(s=>`<div class="sb-card"><div class="sb-val" style="color:${s.color}">${bySt(s.id)}</div><div class="sb-lab">${s.name}</div></div>`).join('');
+
+  const counts=buildings.map(b=>vehicles.filter(v=>v.building===b.id).length);
+  const bMax=Math.max(...counts,1);
+  document.getElementById('buildingChart').innerHTML=
+    buildings.map((b,i)=>`<div class="bar-group"><div class="bar-val">${counts[i]}</div><div class="bar" style="height:${Math.round((counts[i]/bMax)*110)+4}px"></div><div class="bar-label">${b.name.replace('مبنى ','#')}</div></div>`).join('');
+
+  const days=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const str=d.toISOString().split('T')[0];
+    days.push({lbl:d.toLocaleDateString('ar-EG',{weekday:'short'}),cnt:vehicles.filter(v=>v.date===str).length});
+  }
+  const dMax=Math.max(...days.map(d=>d.cnt),1);
+  document.getElementById('dailyChart').innerHTML=
+    days.map(d=>`<div class="bar-group"><div class="bar-val">${d.cnt}</div><div class="bar" style="height:${Math.round((d.cnt/dMax)*110)+4}px"></div><div class="bar-label">${d.lbl}</div></div>`).join('');
+}
+
+// ── الشريط الجانبي ────────────────────────────────────────────────────────────
+function updateSidebar() {
+  document.getElementById('sb-total').textContent=vehicles.length;
+  document.getElementById('sb-status-list').innerHTML=
+    statuses.map(s=>`<div class="sidebar-stat"><span>${s.name}</span><span class="val" style="color:${s.color}">${vehicles.filter(v=>v.status===s.id).length}</span></div>`).join('');
+  const avg=calcAvgTime();
+  document.getElementById('sb-avg').textContent=avg?avg+' يوم':'—';
+}
+
+// ── الإعدادات — مساعد العناصر ─────────────────────────────────────────────────
+function makeListItem(label, colorDot, onEdit, onDelete) {
+  const li=document.createElement('li');
+  const row=document.createElement('div'); row.className='item-row';
+  if(colorDot){ const dot=document.createElement('div'); dot.className='item-color-dot'; dot.style.background=colorDot; row.appendChild(dot); }
+  const nameSpan=document.createElement('div'); nameSpan.className='item-name'; nameSpan.textContent=label; row.appendChild(nameSpan);
+  const editBtn=document.createElement('button'); editBtn.className='btn sm ghost'; editBtn.textContent='تعديل'; row.appendChild(editBtn);
+  const delBtn=document.createElement('button'); delBtn.className='btn sm danger'; delBtn.textContent='✕'; row.appendChild(delBtn);
+  const editRow=document.createElement('div'); editRow.className='item-edit-row';
+  const inp=document.createElement('input'); inp.type='text'; inp.value=label;
+  const saveBtn=document.createElement('button'); saveBtn.className='btn sm'; saveBtn.textContent='حفظ';
+  editRow.appendChild(inp); editRow.appendChild(saveBtn);
+  li.appendChild(row); li.appendChild(editRow);
+  editBtn.onclick=()=>{ const open=editRow.classList.contains('active'); nameSpan.style.display=open?'':'none'; editRow.classList.toggle('active',!open); if(!open) inp.focus(); };
+  saveBtn.onclick=()=>{ const v=inp.value.trim(); if(!v) return; nameSpan.textContent=v; nameSpan.style.display=''; editRow.classList.remove('active'); onEdit(v); };
+  inp.onkeydown=e=>{ if(e.key==='Enter') saveBtn.click(); };
+  delBtn.onclick=onDelete;
+  return li;
+}
+
+// ── الإعدادات — المباني ───────────────────────────────────────────────────────
+function renderSettingsBuildings() {
+  const ul=document.getElementById('buildings-list'); ul.innerHTML='';
+  buildings.forEach(b=>ul.appendChild(makeListItem(b.name, null,
+    v=>{ b.name=v; renderAll(); toast('تم تغيير اسم المبنى.'); },
+    ()=>deleteBuilding(b.id)
+  )));
+}
+function addBuilding() {
+  const v=document.getElementById('new-building').value.trim();
+  if(!v){ toast('يرجى إدخال اسم المبنى.',true); return; }
+  buildings.push({id:'B'+(nextBId++),name:v});
+  document.getElementById('new-building').value='';
+  renderAll(); toast('تمت إضافة المبنى: '+v);
+}
+function deleteBuilding(id) {
+  const inUse=vehicles.some(v=>v.building===id);
+  if(inUse&&!confirm('توجد مركبات مخصصة لهذا المبنى. هل تريد الحذف على أي حال؟')) return;
+  buildings=buildings.filter(b=>b.id!==id);
+  vehicles.forEach(v=>{ if(v.building===id) v.building=''; });
+  renderAll(); toast('تم حذف المبنى.');
+}
+
+// ── الإعدادات — أنواع المركبات ────────────────────────────────────────────────
+function renderSettingsTypes() {
+  const ul=document.getElementById('types-list'); ul.innerHTML='';
+  vehicleTypes.forEach((t,i)=>ul.appendChild(makeListItem(t, null,
+    v=>{ vehicleTypes[i]=v; renderAll(); toast('تم تغيير اسم النوع.'); },
+    ()=>{ if(!confirm('هل تريد حذف النوع "'+vehicleTypes[i]+'"؟')) return; vehicleTypes.splice(i,1); renderAll(); toast('تم حذف النوع.'); }
+  )));
+}
+function addType() {
+  const v=document.getElementById('new-type').value.trim();
+  if(!v){ toast('يرجى إدخال اسم النوع.',true); return; }
+  vehicleTypes.push(v);
+  document.getElementById('new-type').value='';
+  renderAll(); toast('تمت إضافة النوع: '+v);
+}
+
+// ── الإعدادات — الحالات ───────────────────────────────────────────────────────
+function renderSettingsStatuses() {
+  const ul=document.getElementById('statuses-list'); ul.innerHTML='';
+  statuses.forEach(s=>ul.appendChild(makeListItem(s.name, s.color,
+    v=>{ s.name=v; renderAll(); toast('تم تغيير اسم الحالة.'); },
+    ()=>deleteStatus(s.id)
+  )));
+  document.getElementById('colorSwatches').innerHTML=PALETTE.map(c=>
+    `<div class="swatch ${selectedColor===c?'selected':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
+  ).join('');
+}
+function selectColor(c){ selectedColor=c; renderSettingsStatuses(); }
+function addStatus() {
+  const v=document.getElementById('new-status').value.trim();
+  if(!v){ toast('يرجى إدخال اسم الحالة.',true); return; }
+  statuses.push({id:'st'+(nextSId++),name:v,color:selectedColor});
+  document.getElementById('new-status').value='';
+  renderAll(); toast('تمت إضافة الحالة: '+v);
+}
+function deleteStatus(id) {
+  if(statuses.length<=1){ toast('يجب الإبقاء على حالة واحدة على الأقل.',true); return; }
+  const inUse=vehicles.some(v=>v.status===id);
+  if(inUse&&!confirm('توجد مركبات بهذه الحالة. هل تريد الحذف على أي حال؟')) return;
+  statuses=statuses.filter(s=>s.id!==id);
+  vehicles.forEach(v=>{ if(v.status===id) v.status=statuses[0].id; });
+  renderAll(); toast('تم حذف الحالة.');
+}
+
+function renderSettings() {
+  renderSettingsBuildings();
+  renderSettingsTypes();
+  renderSettingsStatuses();
+  renderDataInfo();
+}
+
+// ── التصيير الرئيسي ───────────────────────────────────────────────────────────
+function renderAll() {
+  populateHeaderSelects();
+  renderFilterTags();
+  renderVehicles();
+  updateSidebar();
+  renderReports();
+  renderSettings();
+  saveData();
+}
+
+// ── الحفظ والتخزين ────────────────────────────────────────────────────────────
+const STORAGE_KEY = 'fleetops_v1';
+
+const DEFAULT_STATE = {
+  buildings: [
+    {id:'B1',name:'مبنى 1'},{id:'B2',name:'مبنى 2'},{id:'B3',name:'مبنى 3'},
+    {id:'B4',name:'مبنى 4'},{id:'B5',name:'مبنى 5'},{id:'B6',name:'مبنى 6'},
+    {id:'B7',name:'مبنى 7'},{id:'B8',name:'مبنى 8'},{id:'B9',name:'مبنى 9'},
+    {id:'B10',name:'مبنى 10'},
+  ],
+  vehicleTypes: ['سيارة','مراب','مدرعة','شاحنة','ناقلة جند مدرعة','هامفي','دراجة نارية'],
+  statuses: [
+    {id:'repair',  name:'تحت الإصلاح',         color:'#e8743a'},
+    {id:'awaiting',name:'بانتظار قطع الغيار',  color:'#3ab8e8'},
+    {id:'repaired',name:'تم الإصلاح',          color:'#3ae89a'},
+    {id:'delivered',name:'تم التسليم',         color:'#5a6478'},
+  ],
+  vehicles: [
+    {id:1,num:'VH-0017',type:'مراب',           date:'2026-02-10',building:'B1',engineer:'نقيب حسن',   fault:'عطل في المحرك وتسرب سائل التبريد', status:'repair',   notes:''},
+    {id:2,num:'VH-0033',type:'مدرعة',          date:'2026-02-12',building:'B3',engineer:'رقيب خالد', fault:'تلف في ناقل الحركة',               status:'awaiting', notes:'بانتظار قطع غيار علبة التروس'},
+    {id:3,num:'VH-0005',type:'سيارة',          date:'2026-02-05',building:'B2',engineer:'ملازم عمر',  fault:'عطل في نظام الفرامل',              status:'repaired', notes:'جاهزة للفحص'},
+    {id:4,num:'VH-0041',type:'شاحنة',          date:'2026-02-08',building:'B5',engineer:'نقيب يوسف', fault:'تلف في نظام التعليق',              status:'delivered',notes:''},
+    {id:5,num:'VH-0022',type:'هامفي',          date:'2026-02-14',building:'B4',engineer:'رقيب حسن',  fault:'قصر في النظام الكهربائي',          status:'repair',   notes:''},
+    {id:6,num:'VH-0009',type:'ناقلة جند مدرعة',date:'2026-02-13',building:'B7',engineer:'رائد فريد', fault:'تلف في منظومة الجنازير',           status:'awaiting', notes:'طلب قطع غيار عاجل'},
+    {id:7,num:'VH-0055',type:'مراب',           date:'2026-02-15',building:'B1',engineer:'نقيب حسن',  fault:'عطل في آلية البرج',                status:'repair',   notes:''},
+    {id:8,num:'VH-0018',type:'دراجة نارية',    date:'2026-01-28',building:'B9',engineer:'جندي أحمد', fault:'تآكل السلسلة والتروس',             status:'delivered',notes:''},
+  ],
+  nextId: 9, nextBId: 11, nextSId: 5,
+};
+
+function saveData() {
+  const state = { buildings, vehicleTypes, statuses, vehicles, nextId, nextBId, nextSId, savedAt: Date.now() };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    setSaveIndicator(true, formatSaveTime(state.savedAt));
+  } catch(e) {
+    setSaveIndicator(false, 'فشل الحفظ');
+  }
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const state = JSON.parse(raw);
+    buildings    = state.buildings    || DEFAULT_STATE.buildings;
+    vehicleTypes = state.vehicleTypes || DEFAULT_STATE.vehicleTypes;
+    statuses     = state.statuses     || DEFAULT_STATE.statuses;
+    vehicles     = state.vehicles     || DEFAULT_STATE.vehicles;
+    nextId       = state.nextId       || DEFAULT_STATE.nextId;
+    nextBId      = state.nextBId      || DEFAULT_STATE.nextBId;
+    nextSId      = state.nextSId      || DEFAULT_STATE.nextSId;
+    setSaveIndicator(true, formatSaveTime(state.savedAt));
+    return true;
+  } catch(e) { return false; }
+}
+
+function saveNow() {
+  saveData();
+  toast('✓ تم حفظ البيانات في ذاكرة المتصفح.');
+}
+
+function exportData() {
+  const state = { buildings, vehicleTypes, statuses, vehicles, nextId, nextBId, nextSId, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'متابعة-الانتاج-نسخة-احتياطية-' + new Date().toISOString().split('T')[0] + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('✓ تم تصدير البيانات بنجاح.');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const state = JSON.parse(e.target.result);
+      if (!state.vehicles || !state.buildings) throw new Error('ملف غير صالح');
+      if (!confirm('سيتم استبدال جميع البيانات الحالية. هل تريد المتابعة؟')) return;
+      buildings    = state.buildings    || DEFAULT_STATE.buildings;
+      vehicleTypes = state.vehicleTypes || DEFAULT_STATE.vehicleTypes;
+      statuses     = state.statuses     || DEFAULT_STATE.statuses;
+      vehicles     = state.vehicles     || DEFAULT_STATE.vehicles;
+      nextId       = state.nextId       || 100;
+      nextBId      = state.nextBId      || 100;
+      nextSId      = state.nextSId      || 100;
+      renderAll();
+      toast('✓ تم الاستيراد: '+vehicles.length+' مركبة تم تحميلها.');
+    } catch(err) {
+      toast('⚠ فشل الاستيراد — الملف غير صالح.', true);
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function resetToDefaults() {
+  if (!confirm('إعادة تعيين كل شيء إلى الإعدادات الافتراضية؟ لا يمكن التراجع عن هذا.')) return;
+  buildings    = JSON.parse(JSON.stringify(DEFAULT_STATE.buildings));
+  vehicleTypes = [...DEFAULT_STATE.vehicleTypes];
+  statuses     = JSON.parse(JSON.stringify(DEFAULT_STATE.statuses));
+  vehicles     = JSON.parse(JSON.stringify(DEFAULT_STATE.vehicles));
+  nextId       = DEFAULT_STATE.nextId;
+  nextBId      = DEFAULT_STATE.nextBId;
+  nextSId      = DEFAULT_STATE.nextSId;
+  localStorage.removeItem(STORAGE_KEY);
+  renderAll();
+  toast('↺ تمت إعادة التعيين إلى الإعدادات الافتراضية.');
+}
+
+function formatSaveTime(ts) {
+  if (!ts) return 'محفوظ';
+  const d = new Date(ts);
+  return 'محفوظ ' + d.toLocaleTimeString('ar-EG', {hour:'2-digit',minute:'2-digit'});
+}
+
+function setSaveIndicator(ok, label) {
+  const el = document.getElementById('saveIndicator');
+  const lbl = document.getElementById('saveLabel');
+  if (!el || !lbl) return;
+  lbl.textContent = label;
+  el.classList.toggle('saved', ok);
+  if (ok) setTimeout(() => el.classList.remove('saved'), 2500);
+}
+
+function renderDataInfo() {
+  const el = document.getElementById('dataInfo');
+  if (!el) return;
+  const raw = localStorage.getItem(STORAGE_KEY);
+  const ts = raw ? JSON.parse(raw).savedAt : null;
+  const sizeKB = raw ? (new Blob([raw]).size / 1024).toFixed(1) : 0;
+  el.innerHTML = `
+    المركبات: <span>${vehicles.length}</span> &nbsp;|&nbsp;
+    المباني: <span>${buildings.length}</span> &nbsp;|&nbsp;
+    الحالات: <span>${statuses.length}</span><br>
+    آخر حفظ: <span>${ts ? new Date(ts).toLocaleString('ar-EG') : 'لم يتم الحفظ بعد'}</span><br>
+    المساحة المستخدمة: <span>${sizeKB} كيلوبايت</span>
+  `;
+}
+
+// ── التهيئة ───────────────────────────────────────────────────────────────────
+const loaded = loadData();
+renderAll();
+if (!loaded) toast('ℹ لا يوجد حفظ سابق — يتم عرض بيانات تجريبية.');
+</script>
+</body>
+</html>
